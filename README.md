@@ -1,6 +1,6 @@
 # post_maintenance_checks
 
-An Ansible role that validates system health after a reboot, OS update, or patching window. It runs three categories of checks — application processes, systemd services, and PostgreSQL — with built-in retry logic so transient startup delays don't cause false failures.
+An Ansible role that validates system health after a reboot, OS update, or patching window. It runs four categories of checks — application processes, systemd services, container/pod health, and PostgreSQL — with built-in retry logic so transient startup delays don't cause false failures.
 
 ---
 
@@ -12,10 +12,12 @@ An Ansible role that validates system health after a reboot, OS update, or patch
   - [Retry Behaviour](#retry-behaviour)
   - [Application Checks](#application-checks)
   - [Service Checks](#service-checks)
+  - [Container / Pod Checks](#container--pod-checks)
   - [PostgreSQL Checks](#postgresql-checks)
 - [Check Reference](#check-reference)
   - [Application Checks](#application-checks-1)
   - [Service Checks](#service-checks-1)
+  - [Container / Pod Checks](#container--pod-checks-1)
   - [PostgreSQL Checks](#postgresql-checks-1)
 - [Quick Start](#quick-start)
 - [Example Playbook](#example-playbook)
@@ -38,9 +40,10 @@ Maintenance window ends
         ▼
 ansible-playbook post_maintenance_checks.yml
         │
-        ├─► Application checks  (process alive, port open, HTTP 200)
-        ├─► Service checks      (systemd active + enabled at boot)
-        └─► PostgreSQL checks   (pg_isready, DB exists, R/W test, lag)
+        ├─► Application checks        (process alive, port open, HTTP 200)
+        ├─► Service checks            (systemd active + enabled at boot)
+        ├─► Container / Pod checks    (podman/docker containers and podman pods)
+        └─► PostgreSQL checks         (pg_isready, DB exists, R/W test, lag)
                 │
                 ▼
          PASS → pipeline continues
@@ -55,6 +58,7 @@ ansible-playbook post_maintenance_checks.yml
 |---|---|
 | Ansible | 2.14 or later |
 | `postgresql-client` | Required on the managed host only when PostgreSQL checks are enabled (`psql`, `pg_isready`) |
+| `podman` or `docker` | At least one must be present on managed hosts where `health_check_containers` is non-empty |
 | `curl` / `urllib` | Used internally by the `ansible.builtin.uri` module for HTTP probes |
 | Privilege escalation | Only needed for PostgreSQL tasks (`become_user: postgres`); the rest runs unprivileged |
 
@@ -140,6 +144,38 @@ health_check_services:
 
 ---
 
+### Container / Pod Checks
+
+```yaml
+health_check_containers: []   # list of container / pod definitions
+```
+
+Each item in the list is a dict. Only `name` is required.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `name` | string | — | Container or pod name as known to the runtime |
+| `runtime` | string | `auto` | `podman`, `docker`, or `auto`. `auto` uses podman when available, docker otherwise |
+| `type` | string | `container` | `container` or `pod`. `pod` uses `podman pod inspect` and is podman-only |
+
+Runtime detection runs automatically with `which podman` / `which docker`. The task fails early if neither runtime is found on the host.
+
+**Example:**
+
+```yaml
+health_check_containers:
+  - name: my-web-app              # auto-detect runtime, type=container
+  - name: nginx
+    runtime: docker
+  - name: my-api
+    runtime: podman
+  - name: my-pod
+    runtime: podman
+    type: pod
+```
+
+---
+
 ### PostgreSQL Checks
 
 | Variable | Default | Description |
@@ -187,6 +223,16 @@ health_check_postgresql_max_replication_lag_bytes: 10485760   # 10 MB
 |---|---|---|
 | Service is active | `service_facts` → assert `state == running` | Yes |
 | Service is enabled | `service_facts` → assert `status == enabled` | No |
+
+### Container / Pod Checks
+
+| Check | How it works | Retries |
+|---|---|---|
+| Container is running (podman) | `podman inspect --format '{{.State.Status}}'` → assert `running` | Yes |
+| Container is running (docker) | `docker inspect --format '{{.State.Status}}'` → assert `running` | Yes |
+| Pod is running (podman) | `podman pod inspect --format '{{.State}}'` → assert `running` | Yes |
+
+Runtime auto-detection (`auto`) prefers podman over docker. If `type: pod` is set for an item but podman is not available, that item is skipped.
 
 ### PostgreSQL Checks
 
@@ -258,6 +304,11 @@ ansible-playbook playbooks/post_maintenance_checks.yml \
       - name: Redis
         process: redis-server
         port: 6379
+
+    health_check_containers:
+      - name: my-web-app
+      - name: nginx
+        runtime: docker
 
     health_check_postgresql_enabled: true
     health_check_postgresql_host: localhost
@@ -348,6 +399,19 @@ health_check_postgresql_min_version: "16"   # enforce the new version
 health_check_postgresql_run_rw_test: true
 ```
 
+### After a container host update
+
+```yaml
+health_check_containers:
+  - name: app-api
+    runtime: podman
+  - name: app-worker
+    runtime: podman
+  - name: app-pod
+    runtime: podman
+    type: pod
+```
+
 ### After a database migration
 
 ```yaml
@@ -379,6 +443,7 @@ app-testing/
 │       │   ├── main.yml              # dispatcher — includes sub-task files
 │       │   ├── application_checks.yml
 │       │   ├── service_checks.yml
+│       │   ├── container_checks.yml
 │       │   └── postgresql_checks.yml
 │       ├── handlers/
 │       │   └── main.yml

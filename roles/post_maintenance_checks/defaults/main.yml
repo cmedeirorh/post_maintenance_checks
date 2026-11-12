@@ -40,6 +40,24 @@ health_check_applications: []
 #       enabled: false     # running but boot-disabled is acceptable
 health_check_services: []
 
+# ── Container / Pod checks ───────────────────────────────────────────────────
+# List of containers or pods to verify. Each entry supports:
+#   name       (required) container or pod name
+#   runtime    (optional, default "auto") "podman", "docker", or "auto"
+#              "auto" uses podman when available, docker otherwise
+#   type       (optional, default "container") "container" or "pod"
+#              "pod" is podman-only and uses `podman pod inspect`
+#
+# Example:
+#   health_check_containers:
+#     - name: my-web-app
+#     - name: nginx
+#       runtime: docker
+#     - name: my-pod
+#       runtime: podman
+#       type: pod
+health_check_containers: []
+
 # ── PostgreSQL checks ─────────────────────────────────────────────────────────
 # Whether to run PostgreSQL-specific checks at all
 health_check_postgresql_enabled: true

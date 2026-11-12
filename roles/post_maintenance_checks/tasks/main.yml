@@ -7,6 +7,10 @@
   ansible.builtin.include_tasks: service_checks.yml
   when: health_check_services | length > 0
 
+- name: Post-maintenance health checks | container / pod checks
+  ansible.builtin.include_tasks: container_checks.yml
+  when: health_check_containers | length > 0
+
 - name: Post-maintenance health checks | PostgreSQL checks
   ansible.builtin.include_tasks: postgresql_checks.yml
   when: health_check_postgresql_enabled | bool

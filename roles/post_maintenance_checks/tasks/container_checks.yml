@@ -1,0 +1,74 @@
+---
+# ── Detect available runtimes ─────────────────────────────────────────────────
+- name: Container checks | detect available runtimes
+  ansible.builtin.command:
+    cmd: "{{ item }}"
+  loop:
+    - which podman
+    - which docker
+  register: _runtime_detect
+  changed_when: false
+  failed_when: false
+
+- name: Container checks | set runtime availability facts
+  ansible.builtin.set_fact:
+    _podman_available: "{{ _runtime_detect.results[0].rc == 0 }}"
+    _docker_available: "{{ _runtime_detect.results[1].rc == 0 }}"
+
+- name: Container checks | assert at least one runtime is available
+  ansible.builtin.assert:
+    that: _podman_available | bool or _docker_available | bool
+    fail_msg: "No container runtime (podman or docker) found on this host"
+
+# ── Pod checks (podman-only) ──────────────────────────────────────────────────
+- name: "Container checks | verify pod is running ({{ ctr.name }})"
+  ansible.builtin.command:
+    cmd: "podman pod inspect --format '{{ '{{' }}.State{{ '}}' }}' {{ ctr.name }}"
+  register: _pod_check
+  retries: "{{ health_check_retries }}"
+  delay: "{{ health_check_delay }}"
+  until: _pod_check.stdout | lower == 'running'
+  changed_when: false
+  failed_when: _pod_check.rc != 0 or _pod_check.stdout | lower != 'running'
+  loop: "{{ health_check_containers | selectattr('type', 'defined') | selectattr('type', 'equalto', 'pod') | list }}"
+  loop_control:
+    loop_var: ctr
+    label: "pod | {{ ctr.name }}"
+  when: _podman_available | bool
+
+# ── Container checks (podman) ─────────────────────────────────────────────────
+- name: "Container checks | verify container is running via podman ({{ ctr.name }})"
+  ansible.builtin.command:
+    cmd: "podman inspect --format '{{ '{{' }}.State.Status{{ '}}' }}' {{ ctr.name }}"
+  register: _podman_ctr_check
+  retries: "{{ health_check_retries }}"
+  delay: "{{ health_check_delay }}"
+  until: _podman_ctr_check.stdout | lower == 'running'
+  changed_when: false
+  failed_when: _podman_ctr_check.rc != 0 or _podman_ctr_check.stdout | lower != 'running'
+  loop: "{{ health_check_containers | rejectattr('type', 'equalto', 'pod') | list }}"
+  loop_control:
+    loop_var: ctr
+    label: "container (podman) | {{ ctr.name }}"
+  when:
+    - _podman_available | bool
+    - ctr.runtime | default('auto') in ['podman', 'auto']
+
+# ── Container checks (docker) ─────────────────────────────────────────────────
+- name: "Container checks | verify container is running via docker ({{ ctr.name }})"
+  ansible.builtin.command:
+    cmd: "docker inspect --format '{{ '{{' }}.State.Status{{ '}}' }}' {{ ctr.name }}"
+  register: _docker_ctr_check
+  retries: "{{ health_check_retries }}"
+  delay: "{{ health_check_delay }}"
+  until: _docker_ctr_check.stdout | lower == 'running'
+  changed_when: false
+  failed_when: _docker_ctr_check.rc != 0 or _docker_ctr_check.stdout | lower != 'running'
+  loop: "{{ health_check_containers | rejectattr('type', 'equalto', 'pod') | list }}"
+  loop_control:
+    loop_var: ctr
+    label: "container (docker) | {{ ctr.name }}"
+  when:
+    - _docker_available | bool
+    - ctr.runtime | default('auto') == 'docker' or
+      (ctr.runtime | default('auto') == 'auto' and not _podman_available | bool)
