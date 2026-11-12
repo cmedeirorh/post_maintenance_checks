@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  author: Caetano Medeiros
+  description: Post-maintenance health checks for applications, services, and PostgreSQL
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: EL
+      versions:
+        - "8"
+        - "9"
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+
+dependencies: []

@@ -1,0 +1,164 @@
+---
+# ── 1. Service is running ─────────────────────────────────────────────────────
+- name: PostgreSQL checks | detect service name
+  ansible.builtin.set_fact:
+    _pg_service_name: >-
+      {{ 'postgresql' if ansible_facts['os_family'] == 'Debian'
+         else 'postgresql' }}
+
+- name: PostgreSQL checks | gather service facts
+  ansible.builtin.service_facts:
+
+- name: PostgreSQL checks | assert PostgreSQL service is running
+  ansible.builtin.assert:
+    that:
+      - >-
+        ansible_facts.services.values()
+        | selectattr('name', 'search', 'postgresql')
+        | selectattr('state', 'equalto', 'running')
+        | list | length > 0
+    fail_msg: "No running PostgreSQL service found"
+    success_msg: "PostgreSQL service is running"
+  retries: "{{ health_check_retries }}"
+  delay: "{{ health_check_delay }}"
+  register: _pg_svc_result
+  until: _pg_svc_result is not failed
+
+# ── 2. pg_isready connectivity ────────────────────────────────────────────────
+- name: PostgreSQL checks | verify server accepts connections (pg_isready)
+  ansible.builtin.command:
+    cmd: >-
+      pg_isready
+      -h {{ health_check_postgresql_host }}
+      -p {{ health_check_postgresql_port }}
+  become: true
+  become_user: "{{ health_check_postgresql_os_user }}"
+  register: _pg_isready
+  retries: "{{ health_check_retries }}"
+  delay: "{{ health_check_delay }}"
+  until: _pg_isready.rc == 0
+  changed_when: false
+  failed_when: _pg_isready.rc != 0
+
+# ── 3. Version check ──────────────────────────────────────────────────────────
+- name: PostgreSQL checks | retrieve server version
+  ansible.builtin.command:
+    cmd: >-
+      psql -h {{ health_check_postgresql_host }}
+           -p {{ health_check_postgresql_port }}
+           -t -A -c "SELECT current_setting('server_version_num')::int / 10000"
+  become: true
+  become_user: "{{ health_check_postgresql_os_user }}"
+  register: _pg_version
+  changed_when: false
+  when: health_check_postgresql_min_version | length > 0
+
+- name: PostgreSQL checks | assert minimum version is met
+  ansible.builtin.assert:
+    that:
+      - _pg_version.stdout | int >= health_check_postgresql_min_version | int
+    fail_msg: >-
+      PostgreSQL major version {{ _pg_version.stdout }} is below the required
+      minimum of {{ health_check_postgresql_min_version }}
+    success_msg: >-
+      PostgreSQL version {{ _pg_version.stdout }} meets the minimum requirement
+      of {{ health_check_postgresql_min_version }}
+  when: health_check_postgresql_min_version | length > 0
+
+# ── 4. Database existence checks ──────────────────────────────────────────────
+- name: PostgreSQL checks | verify required databases exist
+  ansible.builtin.command:
+    cmd: >-
+      psql -h {{ health_check_postgresql_host }}
+           -p {{ health_check_postgresql_port }}
+           -t -A -c
+           "SELECT 1 FROM pg_database WHERE datname = '{{ db_name }}'"
+  become: true
+  become_user: "{{ health_check_postgresql_os_user }}"
+  register: _pg_db_check
+  failed_when: _pg_db_check.stdout.strip() != '1'
+  changed_when: false
+  loop: "{{ health_check_postgresql_databases }}"
+  loop_control:
+    loop_var: db_name
+    label: "{{ db_name }}"
+
+# ── 5. Read / write sanity test ───────────────────────────────────────────────
+- name: PostgreSQL checks | run read-write test in each database
+  ansible.builtin.command:
+    cmd: >-
+      psql -h {{ health_check_postgresql_host }}
+           -p {{ health_check_postgresql_port }}
+           -d {{ db_name }}
+           -c "
+             CREATE TEMP TABLE _health_check_rw (id serial, ts timestamptz DEFAULT now());
+             INSERT INTO _health_check_rw DEFAULT VALUES;
+             SELECT COUNT(*) FROM _health_check_rw;
+             DROP TABLE _health_check_rw;
+           "
+  become: true
+  become_user: "{{ health_check_postgresql_os_user }}"
+  changed_when: false
+  loop: "{{ health_check_postgresql_databases }}"
+  loop_control:
+    loop_var: db_name
+    label: "{{ db_name }}"
+  when:
+    - health_check_postgresql_run_rw_test | bool
+    - health_check_postgresql_databases | length > 0
+
+# ── 6. Replication lag check ─────────────────────────────────────────────────
+- name: PostgreSQL checks | check replication lag on primary
+  ansible.builtin.command:
+    cmd: >-
+      psql -h {{ health_check_postgresql_host }}
+           -p {{ health_check_postgresql_port }}
+           -t -A -c "
+             SELECT COALESCE(MAX(pg_wal_lsn_diff(pg_current_wal_lsn(), sent_lsn)), 0)
+             FROM pg_stat_replication
+           "
+  become: true
+  become_user: "{{ health_check_postgresql_os_user }}"
+  register: _pg_replication_lag
+  changed_when: false
+  when: health_check_postgresql_max_replication_lag_bytes | int > 0
+
+- name: PostgreSQL checks | assert replication lag is acceptable
+  ansible.builtin.assert:
+    that:
+      - _pg_replication_lag.stdout | int <= health_check_postgresql_max_replication_lag_bytes | int
+    fail_msg: >-
+      Replication lag ({{ _pg_replication_lag.stdout }} bytes) exceeds the
+      allowed maximum of {{ health_check_postgresql_max_replication_lag_bytes }} bytes
+    success_msg: >-
+      Replication lag ({{ _pg_replication_lag.stdout }} bytes) is within
+      acceptable limits
+  when: health_check_postgresql_max_replication_lag_bytes | int > 0
+
+# ── 7. No long-running / blocking queries ────────────────────────────────────
+- name: PostgreSQL checks | detect long-running queries (> 5 min)
+  ansible.builtin.command:
+    cmd: >-
+      psql -h {{ health_check_postgresql_host }}
+           -p {{ health_check_postgresql_port }}
+           -t -A -c "
+             SELECT pid || ' | ' || now() - pg_stat_activity.query_start AS duration
+                  || ' | ' || left(query, 80)
+             FROM pg_stat_activity
+             WHERE state != 'idle'
+               AND query_start < now() - interval '5 minutes'
+               AND pid <> pg_backend_pid()
+           "
+  become: true
+  become_user: "{{ health_check_postgresql_os_user }}"
+  register: _pg_long_queries
+  changed_when: false
+  failed_when: false
+
+- name: PostgreSQL checks | warn about long-running queries
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Long-running queries detected on
+      {{ health_check_postgresql_host }}:{{ health_check_postgresql_port }}:
+      {{ _pg_long_queries.stdout_lines }}
+  when: _pg_long_queries.stdout | length > 0

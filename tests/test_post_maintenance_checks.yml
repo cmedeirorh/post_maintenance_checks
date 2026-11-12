@@ -1,0 +1,35 @@
+---
+# Minimal local smoke-test playbook (runs against localhost).
+# Useful during role development or in a CI pipeline with a real PostgreSQL container.
+#
+# Usage:
+#   ansible-playbook tests/test_post_maintenance_checks.yml -c local -i localhost,
+#
+- name: Smoke-test post_maintenance_checks role (localhost)
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  become: false
+
+  vars:
+    # Only enable the checks that apply to your local dev environment.
+
+    health_check_services:
+      - name: sshd
+        enabled: false   # may be running but not set to auto-start on a dev box
+
+    health_check_applications: []  # override with real entries as needed
+
+    health_check_postgresql_enabled: true
+    health_check_postgresql_host: localhost
+    health_check_postgresql_port: 5432
+    health_check_postgresql_databases: []
+    health_check_postgresql_run_rw_test: false
+    health_check_postgresql_min_version: ""
+    health_check_postgresql_max_replication_lag_bytes: 0
+
+    health_check_retries: 3
+    health_check_delay: 5
+
+  roles:
+    - role: ../roles/post_maintenance_checks

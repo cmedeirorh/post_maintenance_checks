@@ -1,0 +1,70 @@
+---
+# ── Retry / timing ────────────────────────────────────────────────────────────
+# How many times to retry each check before failing (useful right after a reboot)
+health_check_retries: 5
+# Seconds to wait between retries
+health_check_delay: 10
+
+# ── Application checks ────────────────────────────────────────────────────────
+# List of applications to verify. Each entry supports:
+#   name       (required) human-readable label
+#   process    (optional) process name to look for in `pgrep` output
+#   pid_file   (optional) path to a PID file that must exist and hold a live PID
+#   port       (optional) TCP port that must be listening (checked with ss/netstat)
+#   url        (optional) HTTP/HTTPS URL that must return a 2xx status
+#   url_status (optional, default 200) expected HTTP status code
+#
+# Example:
+#   health_check_applications:
+#     - name: My Web App
+#       process: gunicorn
+#       port: 8080
+#       url: "http://localhost:8080/health"
+#     - name: Redis
+#       process: redis-server
+#       port: 6379
+health_check_applications: []
+
+# ── Service checks ────────────────────────────────────────────────────────────
+# List of systemd services that must be active.
+# Each entry:
+#   name     (required) systemd unit name (e.g. nginx, sshd, crond)
+#   enabled  (optional, default true) assert the service is also enabled at boot
+#
+# Example:
+#   health_check_services:
+#     - name: nginx
+#     - name: sshd
+#       enabled: true
+#     - name: firewalld
+#       enabled: false     # running but boot-disabled is acceptable
+health_check_services: []
+
+# ── PostgreSQL checks ─────────────────────────────────────────────────────────
+# Whether to run PostgreSQL-specific checks at all
+health_check_postgresql_enabled: true
+
+# OS user used to run psql commands (pg_isready, psql)
+health_check_postgresql_os_user: postgres
+
+# PostgreSQL host / port
+health_check_postgresql_host: localhost
+health_check_postgresql_port: 5432
+
+# Optional: list of databases that must exist
+#   health_check_postgresql_databases:
+#     - myappdb
+#     - anotherdb
+health_check_postgresql_databases: []
+
+# Optional: simple connectivity + write-read test executed inside each database.
+# Set to true to run a CREATE / SELECT / DROP of a temporary table.
+health_check_postgresql_run_rw_test: false
+
+# Minimum acceptable PostgreSQL version (leave empty to skip version check)
+# Example: "14"
+health_check_postgresql_min_version: ""
+
+# Maximum replication lag in bytes allowed before the check fails (0 = skip).
+# Only meaningful on a primary with active standbys.
+health_check_postgresql_max_replication_lag_bytes: 0

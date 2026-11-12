@@ -1,0 +1,38 @@
+---
+- name: Service checks | gather service facts
+  ansible.builtin.service_facts:
+
+- name: Service checks | assert service is active
+  ansible.builtin.assert:
+    that:
+      - "ansible_facts.services[svc.name ~ '.service'] is defined"
+      - "ansible_facts.services[svc.name ~ '.service'].state == 'running'"
+    fail_msg: >-
+      Service '{{ svc.name }}' is NOT running
+      (state: {{ ansible_facts.services[svc.name ~ '.service'].state
+                  | default('not found') }})
+    success_msg: "Service '{{ svc.name }}' is running"
+  loop: "{{ health_check_services }}"
+  loop_control:
+    loop_var: svc
+    label: "{{ svc.name }}"
+  retries: "{{ health_check_retries }}"
+  delay: "{{ health_check_delay }}"
+  # re-gather facts on each retry so we see updated state
+  register: _svc_active_result
+  until: _svc_active_result is not failed
+
+- name: Service checks | re-gather facts for enabled check
+  ansible.builtin.service_facts:
+
+- name: Service checks | assert service is enabled at boot
+  ansible.builtin.assert:
+    that:
+      - "ansible_facts.services[svc.name ~ '.service'].status == 'enabled'"
+    fail_msg: "Service '{{ svc.name }}' is not enabled at boot"
+    success_msg: "Service '{{ svc.name }}' is enabled at boot"
+  loop: "{{ health_check_services }}"
+  loop_control:
+    loop_var: svc
+    label: "{{ svc.name }}"
+  when: svc.enabled | default(true) | bool

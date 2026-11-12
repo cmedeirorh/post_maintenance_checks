@@ -1,0 +1,50 @@
+---
+# Post-maintenance health check playbook.
+# Run after a reboot, OS update, or patching window to verify the stack is healthy.
+#
+# Usage:
+#   ansible-playbook playbooks/post_maintenance_checks.yml -i inventories/production
+#   ansible-playbook playbooks/post_maintenance_checks.yml -i inventories/production --limit webservers
+#
+- name: Post-maintenance health checks
+  hosts: all
+  gather_facts: true
+  become: false
+
+  vars:
+    # ── Services that must be up after any maintenance ────────────────────────
+    health_check_services:
+      - name: sshd
+      - name: firewalld
+      - name: nginx
+      - name: postgresql
+
+    # ── Application-level checks ──────────────────────────────────────────────
+    health_check_applications:
+      - name: My Web App (gunicorn)
+        process: gunicorn
+        port: 8080
+        url: "http://localhost:8080/health"
+        url_validate_certs: false
+
+      - name: Redis cache
+        process: redis-server
+        port: 6379
+
+    # ── PostgreSQL-specific checks ────────────────────────────────────────────
+    health_check_postgresql_enabled: true
+    health_check_postgresql_host: localhost
+    health_check_postgresql_port: 5432
+    health_check_postgresql_databases:
+      - myappdb
+    health_check_postgresql_run_rw_test: true
+    health_check_postgresql_min_version: "14"
+    # Set to >0 only on a primary with active streaming replicas:
+    health_check_postgresql_max_replication_lag_bytes: 0
+
+    # ── Retry tuning (extra time after a fresh reboot) ────────────────────────
+    health_check_retries: 6
+    health_check_delay: 10
+
+  roles:
+    - role: post_maintenance_checks

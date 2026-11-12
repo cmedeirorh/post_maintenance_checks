@@ -1,0 +1,12 @@
+---
+- name: Post-maintenance health checks | application checks
+  ansible.builtin.include_tasks: application_checks.yml
+  when: health_check_applications | length > 0
+
+- name: Post-maintenance health checks | service checks
+  ansible.builtin.include_tasks: service_checks.yml
+  when: health_check_services | length > 0
+
+- name: Post-maintenance health checks | PostgreSQL checks
+  ansible.builtin.include_tasks: postgresql_checks.yml
+  when: health_check_postgresql_enabled | bool

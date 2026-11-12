@@ -1,0 +1,79 @@
+---
+# ── Process check ─────────────────────────────────────────────────────────────
+- name: Application checks | verify process is running ({{ app.name }})
+  ansible.builtin.command:
+    cmd: "pgrep -x {{ app.process }}"
+  register: _app_process_check
+  retries: "{{ health_check_retries }}"
+  delay: "{{ health_check_delay }}"
+  until: _app_process_check.rc == 0
+  changed_when: false
+  failed_when: _app_process_check.rc != 0
+  loop: "{{ health_check_applications }}"
+  loop_control:
+    loop_var: app
+    label: "{{ app.name }}"
+  when: app.process is defined
+
+# ── PID file check ────────────────────────────────────────────────────────────
+- name: Application checks | verify PID file exists ({{ app.name }})
+  ansible.builtin.stat:
+    path: "{{ app.pid_file }}"
+  register: _pid_file_stat
+  retries: "{{ health_check_retries }}"
+  delay: "{{ health_check_delay }}"
+  until: _pid_file_stat.stat.exists
+  loop: "{{ health_check_applications }}"
+  loop_control:
+    loop_var: app
+    label: "{{ app.name }}"
+  when: app.pid_file is defined
+
+- name: Application checks | verify PID inside file is alive ({{ app.name }})
+  ansible.builtin.shell:
+    cmd: "kill -0 $(cat {{ app.pid_file }}) 2>/dev/null"
+  register: _pid_alive_check
+  retries: "{{ health_check_retries }}"
+  delay: "{{ health_check_delay }}"
+  until: _pid_alive_check.rc == 0
+  changed_when: false
+  failed_when: _pid_alive_check.rc != 0
+  loop: "{{ health_check_applications }}"
+  loop_control:
+    loop_var: app
+    label: "{{ app.name }}"
+  when:
+    - app.pid_file is defined
+    - _pid_file_stat.results | selectattr('app.pid_file', 'defined')
+      | selectattr('stat.exists') | list | length > 0
+
+# ── Port / socket check ───────────────────────────────────────────────────────
+- name: Application checks | verify port is listening ({{ app.name }})
+  ansible.builtin.wait_for:
+    port: "{{ app.port }}"
+    host: "{{ app.host | default('127.0.0.1') }}"
+    timeout: "{{ health_check_delay * health_check_retries }}"
+    state: started
+  loop: "{{ health_check_applications }}"
+  loop_control:
+    loop_var: app
+    label: "{{ app.name }} | port {{ app.port }}"
+  when: app.port is defined
+
+# ── HTTP endpoint check ───────────────────────────────────────────────────────
+- name: Application checks | verify HTTP endpoint responds ({{ app.name }})
+  ansible.builtin.uri:
+    url: "{{ app.url }}"
+    method: GET
+    status_code: "{{ app.url_status | default(200) }}"
+    validate_certs: "{{ app.url_validate_certs | default(true) }}"
+    timeout: 10
+  register: _http_check
+  retries: "{{ health_check_retries }}"
+  delay: "{{ health_check_delay }}"
+  until: _http_check.status == (app.url_status | default(200)) | int
+  loop: "{{ health_check_applications }}"
+  loop_control:
+    loop_var: app
+    label: "{{ app.name }} | {{ app.url }}"
+  when: app.url is defined
