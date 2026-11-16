@@ -1,12 +1,6 @@
 ---
-# Sets up Nginx in two forms:
-#   1. systemd service named 'nginx'   → satisfies service check
-#   2. Docker container named 'nginx'  → satisfies container check (runtime: docker)
-#
-# The docker container is exposed on port 8080 so it does not conflict with the
-# native nginx service on port 80.
-#
-# Prerequisite: docker CLI available on the target host.
+# Installs Nginx and starts it as a systemd service.
+# The role checks: systemd service 'nginx' active + enabled.
 #
 # Usage:
 #   ansible-playbook test_setup/setup_nginx.yml -i <host>, -u <user> --ask-become-pass
@@ -30,27 +24,8 @@
         update_cache: true
       when: ansible_facts['os_family'] == 'Debian'
 
-    - name: Enable and start nginx systemd service
+    - name: Enable and start nginx
       ansible.builtin.systemd:
         name: nginx
         state: started
         enabled: true
-
-    - name: Pull nginx docker image
-      ansible.builtin.command: docker pull nginx:latest
-      changed_when: true
-
-    - name: Remove existing nginx docker container (idempotency)
-      ansible.builtin.command: docker rm -f nginx
-      register: _rm_nginx
-      failed_when: false
-      changed_when: _rm_nginx.rc == 0
-
-    - name: Run nginx docker container
-      ansible.builtin.command: >
-        docker run -d
-          --name nginx
-          --restart unless-stopped
-          -p 8080:80
-          nginx:latest
-      changed_when: true

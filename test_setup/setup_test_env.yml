@@ -55,8 +55,6 @@
           health_check_containers:
             - name: my-web-app
               runtime: podman
-            - name: nginx
-              runtime: docker
             - name: my-pod
               runtime: podman
               type: pod
