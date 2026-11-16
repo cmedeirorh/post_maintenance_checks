@@ -1,0 +1,55 @@
+---
+# Installs, initialises, and starts PostgreSQL, then creates the test database.
+# Run standalone or imported by setup_test_env.yml.
+#
+# Usage:
+#   ansible-playbook test_setup/setup_postgresql.yml -i <host>, -u <user> --ask-become-pass
+
+- name: Set up PostgreSQL
+  hosts: all
+  gather_facts: true
+  become: true
+
+  vars:
+    pg_os_user: postgres
+    pg_db: myapp_production
+
+  tasks:
+    - name: Install PostgreSQL (RHEL family)
+      ansible.builtin.dnf:
+        name:
+          - postgresql-server
+          - postgresql
+        state: present
+      when: ansible_facts['os_family'] == 'RedHat'
+
+    - name: Install PostgreSQL (Debian / Ubuntu)
+      ansible.builtin.apt:
+        name:
+          - postgresql
+          - postgresql-client
+        state: present
+        update_cache: true
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Initialise PostgreSQL data directory (RHEL)
+      ansible.builtin.command: postgresql-setup --initdb
+      args:
+        creates: /var/lib/pgsql/data/PG_VERSION
+      when: ansible_facts['os_family'] == 'RedHat'
+
+    - name: Enable and start postgresql
+      ansible.builtin.systemd:
+        name: postgresql
+        state: started
+        enabled: true
+
+    - name: Create test database
+      ansible.builtin.command:
+        cmd: "psql -c \"CREATE DATABASE {{ pg_db }};\""
+      become_user: "{{ pg_os_user }}"
+      register: _pg_create_db
+      failed_when:
+        - _pg_create_db.rc != 0
+        - '"already exists" not in _pg_create_db.stderr'
+      changed_when: _pg_create_db.rc == 0

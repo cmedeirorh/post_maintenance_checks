@@ -1,0 +1,96 @@
+---
+# Creates the Podman resources checked by the role:
+#   - my-web-app  container (runtime=podman, type=container)
+#   - my-pod      pod       (runtime=podman, type=pod)
+#
+# A pod containing only the auto-created infra container stays in "Created"
+# state. A second container (my-pod-app) is added to bring the pod to "Running".
+#
+# Idempotent: existing resources are removed and recreated on each run.
+#
+# Prerequisite: podman installed on the target host.
+#
+# Usage:
+#   ansible-playbook test_setup/setup_podman_resources.yml -i <host>, -u <user> --ask-become-pass
+
+- name: Set up Podman resources
+  hosts: all
+  gather_facts: true
+  become: false
+
+  vars:
+    podman_image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+
+  tasks:
+    - name: Install podman (RHEL family)
+      ansible.builtin.dnf:
+        name: podman
+        state: present
+      become: true
+      when: ansible_facts['os_family'] == 'RedHat'
+
+    - name: Install podman (Debian / Ubuntu)
+      ansible.builtin.apt:
+        name: podman
+        state: present
+        update_cache: true
+      become: true
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Pull UBI image
+      ansible.builtin.command: podman pull {{ podman_image }}
+      changed_when: true
+
+    # ── my-web-app container ───────────────────────────────────────────────
+    - name: Remove existing my-web-app container
+      ansible.builtin.command: podman rm -f my-web-app
+      register: _rm_web_app
+      failed_when: false
+      changed_when: _rm_web_app.rc == 0
+
+    - name: Run my-web-app container
+      ansible.builtin.command: >
+        podman run -d
+          --name my-web-app
+          {{ podman_image }}
+          sleep infinity
+      changed_when: true
+
+    # ── my-pod pod ─────────────────────────────────────────────────────────
+    - name: Remove existing my-pod pod
+      ansible.builtin.command: podman pod rm -f my-pod
+      register: _rm_pod
+      failed_when: false
+      changed_when: _rm_pod.rc == 0
+
+    - name: Create my-pod pod
+      ansible.builtin.command: podman pod create --name my-pod
+      changed_when: true
+
+    - name: Run container inside my-pod to bring pod to Running state
+      ansible.builtin.command: >
+        podman run -d
+          --pod my-pod
+          --name my-pod-app
+          {{ podman_image }}
+          sleep infinity
+      changed_when: true
+
+    # ── Verify ─────────────────────────────────────────────────────────────
+    - name: Verify my-web-app is running
+      ansible.builtin.command: podman inspect --format "{{ '{{' }}.State.Status{{ '}}' }}" my-web-app
+      register: _web_app_state
+      changed_when: false
+      failed_when: _web_app_state.stdout | lower != 'running'
+
+    - name: Verify my-pod is running
+      ansible.builtin.command: podman pod inspect --format "{{ '{{' }}.State{{ '}}' }}" my-pod
+      register: _pod_state
+      changed_when: false
+      failed_when: _pod_state.stdout | lower != 'running'
+
+    - name: Show Podman resource states
+      ansible.builtin.debug:
+        msg:
+          - "my-web-app : {{ _web_app_state.stdout }}"
+          - "my-pod     : {{ _pod_state.stdout }}"

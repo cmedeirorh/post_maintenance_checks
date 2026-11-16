@@ -1,0 +1,70 @@
+---
+# Main test environment playbook.
+# Imports each per-service playbook in dependency order, then prints the
+# health_check_* variable block to paste into your test run.
+#
+# Each sub-playbook can also be run individually for targeted setup.
+#
+# Usage:
+#   ansible-playbook test_setup/setup_test_env.yml -i <host>, -u <user> --ask-become-pass
+#   # Locally:
+#   ansible-playbook test_setup/setup_test_env.yml -c local -i localhost, --ask-become-pass
+
+- ansible.builtin.import_playbook: setup_postgresql.yml
+- ansible.builtin.import_playbook: setup_redis.yml
+- ansible.builtin.import_playbook: setup_nginx.yml
+- ansible.builtin.import_playbook: setup_gunicorn_app.yml
+- ansible.builtin.import_playbook: setup_celery_worker.yml
+- ansible.builtin.import_playbook: setup_podman_resources.yml
+
+- name: Print health_check_* vars for the test playbook
+  hosts: all
+  gather_facts: true
+
+  vars:
+    pg_host: localhost
+    pg_port: 5432
+    pg_db: myapp_production
+
+  tasks:
+    - name: Display vars block
+      ansible.builtin.debug:
+        msg: |
+          Paste the block below into your test playbook or group_vars file:
+
+          health_check_retries: 5
+          health_check_delay: 10
+
+          health_check_services:
+            - name: postgresql
+            - name: {{ 'redis' if ansible_facts['os_family'] == 'RedHat' else 'redis-server' }}
+            - name: nginx
+            - name: gunicorn_app
+            - name: celery_worker
+
+          health_check_applications:
+            - name: Gunicorn API
+              process: gunicorn
+              port: 8000
+              url: http://localhost:8000/healthz
+
+            - name: Redis Cache
+              process: redis-server
+              port: 6379
+
+          health_check_containers:
+            - name: my-web-app
+              runtime: podman
+            - name: nginx
+              runtime: docker
+            - name: my-pod
+              runtime: podman
+              type: pod
+
+          health_check_postgresql_enabled: true
+          health_check_postgresql_host: "{{ pg_host }}"
+          health_check_postgresql_port: {{ pg_port }}
+          health_check_postgresql_databases:
+            - {{ pg_db }}
+          health_check_postgresql_run_rw_test: true
+          health_check_postgresql_min_version: "15"

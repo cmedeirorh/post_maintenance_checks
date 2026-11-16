@@ -1,0 +1,40 @@
+---
+# Installs and starts Redis as a systemd service.
+# The role checks process name 'redis-server' (pgrep -x), port 6379, and the
+# systemd service named 'redis' (RHEL) or 'redis-server' (Debian/Ubuntu).
+#
+# Usage:
+#   ansible-playbook test_setup/setup_redis.yml -i <host>, -u <user> --ask-become-pass
+
+- name: Set up Redis
+  hosts: all
+  gather_facts: true
+  become: true
+
+  tasks:
+    - name: Install redis (RHEL family)
+      ansible.builtin.dnf:
+        name: redis
+        state: present
+      when: ansible_facts['os_family'] == 'RedHat'
+
+    - name: Install redis-server (Debian / Ubuntu)
+      ansible.builtin.apt:
+        name: redis-server
+        state: present
+        update_cache: true
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Enable and start redis (RHEL)
+      ansible.builtin.systemd:
+        name: redis
+        state: started
+        enabled: true
+      when: ansible_facts['os_family'] == 'RedHat'
+
+    - name: Enable and start redis-server (Debian / Ubuntu)
+      ansible.builtin.systemd:
+        name: redis-server
+        state: started
+        enabled: true
+      when: ansible_facts['os_family'] == 'Debian'

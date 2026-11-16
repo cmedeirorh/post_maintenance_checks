@@ -1,0 +1,98 @@
+---
+# Deploys a minimal Flask/Gunicorn sample app on port 8000.
+# All app and service content is embedded here — nothing to build.
+# The role checks: pgrep -x gunicorn, port 8000, GET /healthz → HTTP 200.
+#
+# Usage:
+#   ansible-playbook test_setup/setup_gunicorn_app.yml -i <host>, -u <user> --ask-become-pass
+
+- name: Set up Gunicorn app
+  hosts: all
+  gather_facts: true
+  become: true
+
+  vars:
+    app_dir: /opt/test_env/gunicorn_app
+
+  handlers:
+    - name: Restart gunicorn_app
+      ansible.builtin.systemd:
+        name: gunicorn_app
+        state: restarted
+        daemon_reload: true
+
+  tasks:
+    - name: Install python3 and pip (RHEL family)
+      ansible.builtin.dnf:
+        name:
+          - python3
+          - python3-pip
+        state: present
+      when: ansible_facts['os_family'] == 'RedHat'
+
+    - name: Install python3 and pip (Debian / Ubuntu)
+      ansible.builtin.apt:
+        name:
+          - python3
+          - python3-pip
+          - python3-venv
+        state: present
+        update_cache: true
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Create app directory
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Write app.py
+      ansible.builtin.copy:
+        dest: "{{ app_dir }}/app.py"
+        mode: "0644"
+        content: |
+          from flask import Flask, jsonify
+
+          app = Flask(__name__)
+
+          @app.route("/healthz")
+          def healthz():
+              return jsonify({"status": "ok"}), 200
+
+    - name: Install flask and gunicorn into virtualenv
+      ansible.builtin.pip:
+        name:
+          - "flask>=3.0"
+          - "gunicorn>=21.2"
+        virtualenv: "{{ app_dir }}/venv"
+        virtualenv_command: python3 -m venv
+
+    - name: Write gunicorn_app systemd unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/gunicorn_app.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Gunicorn API Server (post_maintenance_checks test)
+          After=network.target
+
+          [Service]
+          Type=simple
+          WorkingDirectory={{ app_dir }}
+          ExecStart={{ app_dir }}/venv/bin/gunicorn \
+              --bind 0.0.0.0:8000 \
+              --workers 2 \
+              app:app
+          Restart=on-failure
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart gunicorn_app
+
+    - name: Enable and start gunicorn_app
+      ansible.builtin.systemd:
+        name: gunicorn_app
+        state: started
+        enabled: true
+        daemon_reload: true
