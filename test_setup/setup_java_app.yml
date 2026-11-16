@@ -3,12 +3,12 @@
   hosts: all
   become: true
   vars:
-  - app_port: "8080"
-  - app_name: "tasks-app"
-  - app_image: "docker.io/tiangolo/uvicorn-gunicorn"
+    app_port: "8080"
+    app_name: "tasks-app"
+    app_image: "docker.io/tiangolo/uvicorn-gunicorn"
  
   tasks:
-  - name: Install podman and firewald packages
+  - name: Install podman and firewalld packages
     ansible.builtin.package:
       name:
         - podman
@@ -19,8 +19,9 @@
     containers.podman.podman_container:
       name: "{{ app_name }}"
       image: "{{ app_image }}"
+      state: started
       ports:
-        - "{{ app_port }}:{{ app_port }}" 
+        - "{{ app_port }}:{{ app_port }}"
 
   - name: Enable firewald service to start on boot up
     ansible.builtin.systemd:
