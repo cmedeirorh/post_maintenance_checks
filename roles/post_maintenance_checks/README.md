@@ -40,7 +40,8 @@ health_check_applications:
 health_check_services:
   - name: nginx
   - name: postgresql
-    enabled: true             # also assert enabled at boot (default true)
+  - name: firewalld
+    enabled: false            # only assert running; skip the is-enabled-at-boot check
 
 # Container / pod checks – list of dicts (requires health_check_containers_enabled: true)
 health_check_containers:

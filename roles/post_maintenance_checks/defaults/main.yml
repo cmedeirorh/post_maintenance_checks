@@ -38,15 +38,15 @@ health_check_services_enabled: false
 # List of systemd services that must be active.
 # Each entry:
 #   name     (required) systemd unit name (e.g. nginx, sshd, crond)
-#   enabled  (optional, default true) assert the service is also enabled at boot
+#   enabled  (optional, default true) when true, also assert the service is
+#            enabled at boot; set to false to skip that assertion
 #
 # Example:
 #   health_check_services:
 #     - name: nginx
 #     - name: sshd
-#       enabled: true
 #     - name: firewalld
-#       enabled: false     # running but boot-disabled is acceptable
+#       enabled: false     # only assert running; skip the is-enabled-at-boot check
 health_check_services: []
 
 # ── Container / Pod checks ───────────────────────────────────────────────────
