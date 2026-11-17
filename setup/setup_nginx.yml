@@ -1,31 +1,120 @@
 ---
-# Installs Nginx and starts it as a systemd service.
-# The role checks: systemd service 'nginx' active + enabled.
+# Installs Nginx and deploys a simple test webpage on ports 80 (HTTP) and
+# 443 (HTTPS). A self-signed TLS certificate is generated for the HTTPS listener.
+# On Debian/Ubuntu the default site is removed to avoid a port-80 conflict.
 #
 # Usage:
-#   ansible-playbook test_setup/setup_nginx.yml -i <host>, -u <user> --ask-become-pass
+#   ansible-playbook setup/setup_nginx.yml -i <host>, -u <user> --ask-become-pass
 
-- name: Set up Nginx
+- name: Set up Nginx with HTTP and HTTPS
   hosts: all
   gather_facts: true
   become: true
 
-  tasks:
-    - name: Install nginx (RHEL family)
-      ansible.builtin.dnf:
+  vars:
+    nginx_web_root: /var/www/html
+    nginx_ssl_dir: /etc/nginx/ssl
+    nginx_ssl_cert: /etc/nginx/ssl/nginx.crt
+    nginx_ssl_key: /etc/nginx/ssl/nginx.key
+
+  handlers:
+    - name: Restart nginx
+      ansible.builtin.systemd:
         name: nginx
+        state: restarted
+        daemon_reload: true
+
+  tasks:
+    - name: Install nginx and openssl (RHEL family)
+      ansible.builtin.dnf:
+        name:
+          - nginx
+          - openssl
         state: present
       when: ansible_facts['os_family'] == 'RedHat'
 
-    - name: Install nginx (Debian / Ubuntu)
+    - name: Install nginx and openssl (Debian / Ubuntu)
       ansible.builtin.apt:
-        name: nginx
+        name:
+          - nginx
+          - openssl
         state: present
         update_cache: true
       when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Create web root directory
+      ansible.builtin.file:
+        path: "{{ nginx_web_root }}"
+        state: directory
+        mode: "0755"
+
+    - name: Deploy index.html
+      ansible.builtin.copy:
+        dest: "{{ nginx_web_root }}/index.html"
+        mode: "0644"
+        content: |
+          <!DOCTYPE html>
+          <html>
+            <head><title>Post-Maintenance Test Page</title></head>
+            <body>
+              <h1>Nginx is running</h1>
+              <p>Post-maintenance health check page.</p>
+            </body>
+          </html>
+      notify: Restart nginx
+
+    - name: Create SSL directory
+      ansible.builtin.file:
+        path: "{{ nginx_ssl_dir }}"
+        state: directory
+        mode: "0700"
+
+    - name: Generate self-signed TLS certificate
+      ansible.builtin.command:
+        cmd: >-
+          openssl req -x509 -nodes -days 365
+          -newkey rsa:2048
+          -keyout {{ nginx_ssl_key }}
+          -out {{ nginx_ssl_cert }}
+          -subj "/CN=localhost"
+        creates: "{{ nginx_ssl_cert }}"
+      notify: Restart nginx
+
+    - name: Remove default Debian/Ubuntu nginx site
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      when: ansible_facts['os_family'] == 'Debian'
+      notify: Restart nginx
+
+    - name: Deploy nginx virtual host configuration
+      ansible.builtin.copy:
+        dest: /etc/nginx/conf.d/test_app.conf
+        mode: "0644"
+        content: |
+          server {
+              listen 80;
+              listen [::]:80;
+              server_name _;
+              root {{ nginx_web_root }};
+              index index.html;
+          }
+
+          server {
+              listen 443 ssl;
+              listen [::]:443 ssl;
+              server_name _;
+              root {{ nginx_web_root }};
+              index index.html;
+
+              ssl_certificate     {{ nginx_ssl_cert }};
+              ssl_certificate_key {{ nginx_ssl_key }};
+          }
+      notify: Restart nginx
 
     - name: Enable and start nginx
       ansible.builtin.systemd:
         name: nginx
         state: started
         enabled: true
+        daemon_reload: true
