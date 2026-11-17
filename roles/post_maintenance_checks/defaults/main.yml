@@ -1,4 +1,7 @@
 ---
+# All check categories are disabled by default.
+# Set the corresponding _enabled flag to true to activate a category.
+#
 # ── Retry / timing ────────────────────────────────────────────────────────────
 # How many times to retry each check before failing (useful right after a reboot)
 health_check_retries: 5
@@ -68,7 +71,7 @@ health_check_containers_enabled: false
 health_check_containers: []
 
 # ── PostgreSQL checks ─────────────────────────────────────────────────────────
-# Whether to run PostgreSQL-specific checks at all
+# Set to true to enable PostgreSQL checks
 health_check_postgresql_enabled: false
 
 # OS user used to run psql commands (pg_isready, psql)
