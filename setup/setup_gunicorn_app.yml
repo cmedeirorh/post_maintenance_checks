@@ -1,7 +1,7 @@
 ---
-# Deploys a minimal Flask/Gunicorn sample app on port 8000.
+# Deploys a minimal Flask/Gunicorn sample app on port 80.
 # All app and service content is embedded here — nothing to build.
-# The role checks: pgrep -x gunicorn, port 8000, GET /healthz → HTTP 200.
+# The role checks: pgrep -x gunicorn, port 80, GET /healthz → HTTP 200.
 #
 # Usage:
 #   ansible-playbook test_setup/setup_gunicorn_app.yml -i <host>, -u <user> --ask-become-pass
@@ -80,7 +80,7 @@
           Type=simple
           WorkingDirectory={{ app_dir }}
           ExecStart={{ app_dir }}/venv/bin/gunicorn \
-              --bind 0.0.0.0:8000 \
+              --bind 0.0.0.0:80 \
               --workers 2 \
               app:app
           Restart=on-failure
