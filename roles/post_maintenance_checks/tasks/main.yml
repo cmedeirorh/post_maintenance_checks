@@ -1,15 +1,15 @@
 ---
 - name: Post-maintenance health checks | application checks
   ansible.builtin.include_tasks: application_checks.yml
-  when: health_check_applications | length > 0
+  when: health_check_applications_enabled | bool
 
 - name: Post-maintenance health checks | service checks
   ansible.builtin.include_tasks: service_checks.yml
-  when: health_check_services | length > 0
+  when: health_check_services_enabled | bool
 
 - name: Post-maintenance health checks | container / pod checks
   ansible.builtin.include_tasks: container_checks.yml
-  when: health_check_containers | length > 0
+  when: health_check_containers_enabled | bool
 
 - name: Post-maintenance health checks | PostgreSQL checks
   ansible.builtin.include_tasks: postgresql_checks.yml

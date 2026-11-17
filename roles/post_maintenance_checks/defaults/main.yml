@@ -6,6 +6,9 @@ health_check_retries: 5
 health_check_delay: 10
 
 # ── Application checks ────────────────────────────────────────────────────────
+# Set to true to enable application checks
+health_check_applications_enabled: false
+
 # List of applications to verify. Each entry supports:
 #   name       (required) human-readable label
 #   process    (optional) process name to look for in `pgrep` output
@@ -26,6 +29,9 @@ health_check_delay: 10
 health_check_applications: []
 
 # ── Service checks ────────────────────────────────────────────────────────────
+# Set to true to enable service checks
+health_check_services_enabled: false
+
 # List of systemd services that must be active.
 # Each entry:
 #   name     (required) systemd unit name (e.g. nginx, sshd, crond)
@@ -41,6 +47,9 @@ health_check_applications: []
 health_check_services: []
 
 # ── Container / Pod checks ───────────────────────────────────────────────────
+# Set to true to enable container / pod checks
+health_check_containers_enabled: false
+
 # List of containers or pods to verify. Each entry supports:
 #   name       (required) container or pod name
 #   runtime    (optional, default "auto") "podman", "docker", or "auto"
@@ -60,7 +69,7 @@ health_check_containers: []
 
 # ── PostgreSQL checks ─────────────────────────────────────────────────────────
 # Whether to run PostgreSQL-specific checks at all
-health_check_postgresql_enabled: true
+health_check_postgresql_enabled: false
 
 # OS user used to run psql commands (pg_isready, psql)
 health_check_postgresql_os_user: postgres
