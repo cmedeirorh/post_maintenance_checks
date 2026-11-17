@@ -1,0 +1,8 @@
+---
+- name: Post-maintenance health checks
+  hosts: all
+  gather_facts: true
+  become: false
+
+  roles:
+    - role: post_maintenance_checks
