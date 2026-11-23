@@ -32,7 +32,7 @@ health_check_system_disk_check_mounts: []
 # Check whether a secondary reboot is still required after patching.
 # On Debian/Ubuntu this tests for /var/run/reboot-required.
 # On RHEL/CentOS this runs `needs-restarting -r`.
-health_check_system_check_pending_reboot: true
+health_check_system_check_pending_reboot: false
 
 # ── Application checks ────────────────────────────────────────────────────────
 # Set to true to enable application checks
@@ -145,7 +145,7 @@ health_check_log_enabled: false
 
 # Scan systemd journal for priority 3 and above (errors/criticals) in the
 # current boot. Findings are reported as a warning by default.
-health_check_log_journal_errors: true
+health_check_log_journal_errors: false
 
 # Set to true to fail the play when journal errors are detected.
 # Default false: errors are reported but do not fail the play.

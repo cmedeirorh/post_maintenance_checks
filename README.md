@@ -104,7 +104,7 @@ health_check_system_enabled: false
 | `health_check_system_expected_kernel` | `""` | Expected `uname -r` string after patching. Empty string disables the check |
 | `health_check_system_disk_min_free_percent` | `15` | Minimum free disk space percentage on each listed mount |
 | `health_check_system_disk_check_mounts` | `[]` | Mount points to check for free space. Example: `["/", "/boot", "/var"]` |
-| `health_check_system_check_pending_reboot` | `true` | Check whether a secondary reboot is still required. Uses `/var/run/reboot-required` on Debian/Ubuntu and `needs-restarting -r` on RHEL/CentOS |
+| `health_check_system_check_pending_reboot` | `false` | Check whether a secondary reboot is still required. Uses `/var/run/reboot-required` on Debian/Ubuntu and `needs-restarting -r` on RHEL/CentOS |
 
 **Example:**
 
@@ -117,7 +117,7 @@ health_check_system_disk_check_mounts:
   - /
   - /boot
   - /var
-health_check_system_check_pending_reboot: true
+health_check_system_check_pending_reboot: true      # explicitly opt in
 ```
 
 ---
@@ -290,7 +290,7 @@ health_check_log_enabled: false
 | Variable | Default | Description |
 |---|---|---|
 | `health_check_log_enabled` | `false` | Set to `true` to enable this check category |
-| `health_check_log_journal_errors` | `true` | Scan `journalctl -p 3 -b 0` for errors and above in the current boot |
+| `health_check_log_journal_errors` | `false` | Scan `journalctl -p 3 -b 0` for errors and above in the current boot |
 | `health_check_log_fail_on_journal_errors` | `false` | When `true`, fail the play if journal errors are found. Default `false` warns only |
 | `health_check_log_patterns` | `[]` | Additional regex patterns to search for in the current boot journal using `journalctl --grep`. Matches are reported as warnings |
 
@@ -298,7 +298,7 @@ health_check_log_enabled: false
 
 ```yaml
 health_check_log_enabled: true
-health_check_log_journal_errors: true
+health_check_log_journal_errors: true               # explicitly opt in
 health_check_log_fail_on_journal_errors: false
 health_check_log_patterns:
   - "segfault"
