@@ -1,0 +1,55 @@
+---
+# ── Mount point verification ──────────────────────────────────────────────────
+- name: Filesystem checks | assert expected mount points are present
+  ansible.builtin.assert:
+    that:
+      - ansible_mounts | selectattr('mount', 'equalto', mount_path) | list | length > 0
+    fail_msg: "Mount point {{ mount_path }} is not mounted"
+    success_msg: "Mount point {{ mount_path }} is present"
+  loop: "{{ health_check_filesystem_check_mounts }}"
+  loop_control:
+    loop_var: mount_path
+    label: "{{ mount_path }}"
+  when: health_check_filesystem_check_mounts | length > 0
+
+# ── LVM volume group health ───────────────────────────────────────────────────
+- name: Filesystem checks | check LVM volume group status
+  ansible.builtin.command:
+    cmd: vgs --noheadings -o vg_name,vg_attr
+  register: _vgs_output
+  changed_when: false
+  failed_when: false
+  when: health_check_filesystem_check_lvm | bool
+
+- name: Filesystem checks | assert LVM volume groups are healthy
+  ansible.builtin.assert:
+    that:
+      - _vgs_output.rc == 0
+      - '"partial" not in _vgs_output.stdout | lower'
+    fail_msg: >-
+      LVM volume group health check failed (rc={{ _vgs_output.rc }}):
+      {{ _vgs_output.stdout }}
+    success_msg: "All LVM volume groups are healthy"
+  when:
+    - health_check_filesystem_check_lvm | bool
+    - _vgs_output is defined
+
+# ── Software RAID health ──────────────────────────────────────────────────────
+- name: Filesystem checks | read mdadm RAID status
+  ansible.builtin.command:
+    cmd: cat /proc/mdstat
+  register: _mdstat
+  changed_when: false
+  when: health_check_filesystem_check_raid | bool
+
+- name: Filesystem checks | assert no RAID arrays are degraded
+  ansible.builtin.assert:
+    that:
+      - not (_mdstat.stdout is search('\[.*_.*\]'))
+    fail_msg: >-
+      One or more mdadm RAID arrays appear degraded (found failed drives in
+      /proc/mdstat). Review with: cat /proc/mdstat
+    success_msg: "All RAID arrays appear healthy"
+  when:
+    - health_check_filesystem_check_raid | bool
+    - _mdstat is defined

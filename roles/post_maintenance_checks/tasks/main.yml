@@ -1,4 +1,8 @@
 ---
+- name: Post-maintenance health checks | system / OS state checks
+  ansible.builtin.include_tasks: system_checks.yml
+  when: health_check_system_enabled | bool
+
 - name: Post-maintenance health checks | application checks
   ansible.builtin.include_tasks: application_checks.yml
   when: health_check_applications_enabled | bool
@@ -14,3 +18,11 @@
 - name: Post-maintenance health checks | PostgreSQL checks
   ansible.builtin.include_tasks: postgresql_checks.yml
   when: health_check_postgresql_enabled | bool
+
+- name: Post-maintenance health checks | filesystem checks
+  ansible.builtin.include_tasks: filesystem_checks.yml
+  when: health_check_filesystem_enabled | bool
+
+- name: Post-maintenance health checks | log / journal checks
+  ansible.builtin.include_tasks: log_checks.yml
+  when: health_check_log_enabled | bool

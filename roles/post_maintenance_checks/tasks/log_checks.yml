@@ -1,0 +1,56 @@
+---
+# ── System journal error scan (current boot) ──────────────────────────────────
+- name: Log checks | scan system journal for critical errors (current boot)
+  ansible.builtin.command:
+    cmd: journalctl -p 3 -b 0 --no-pager -q
+  register: _journal_errors
+  changed_when: false
+  failed_when: false
+  when: health_check_log_journal_errors | bool
+
+- name: Log checks | report critical journal entries
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Critical errors found in system journal for current boot.
+      Run 'journalctl -p 3 -b 0' to review:
+      {{ _journal_errors.stdout_lines }}
+  when:
+    - health_check_log_journal_errors | bool
+    - _journal_errors.stdout | length > 0
+
+- name: Log checks | fail on critical journal errors
+  ansible.builtin.assert:
+    that:
+      - _journal_errors.stdout | length == 0
+    fail_msg: >-
+      Critical errors found in system journal for current boot.
+      Run 'journalctl -p 3 -b 0' to review.
+    success_msg: "No critical errors found in system journal for current boot"
+  when:
+    - health_check_log_journal_errors | bool
+    - health_check_log_fail_on_journal_errors | bool
+
+# ── Custom journal pattern scan ───────────────────────────────────────────────
+- name: Log checks | scan journal for custom error patterns
+  ansible.builtin.command:
+    cmd: journalctl -b 0 --no-pager -q --grep "{{ log_pattern }}"
+  register: _custom_log_scan
+  changed_when: false
+  failed_when: false
+  loop: "{{ health_check_log_patterns }}"
+  loop_control:
+    loop_var: log_pattern
+    label: "{{ log_pattern }}"
+  when: health_check_log_patterns | length > 0
+
+- name: Log checks | report custom pattern matches
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Pattern '{{ item.log_pattern }}' matched in journal:
+      {{ item.stdout_lines }}
+  loop: "{{ _custom_log_scan.results | default([]) }}"
+  loop_control:
+    label: "{{ item.log_pattern | default('') }}"
+  when:
+    - health_check_log_patterns | length > 0
+    - item.stdout | default('') | length > 0

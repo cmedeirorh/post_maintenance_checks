@@ -8,6 +8,32 @@ health_check_retries: 5
 # Seconds to wait between retries
 health_check_delay: 10
 
+# ── System / OS state checks ──────────────────────────────────────────────────
+# Set to true to enable system-level checks (uptime, kernel, disk, pending reboot)
+health_check_system_enabled: false
+
+# Assert uptime is below this many seconds (verifies a reboot occurred).
+# Set to the maintenance window duration in seconds; 0 disables this check.
+# Example: 3600 asserts the system rebooted within the last hour.
+health_check_system_max_uptime_seconds: 0
+
+# Expected kernel version string from `uname -r`. Empty string disables the check.
+# Capture the value with `uname -r` after applying the patch.
+# Example: "5.14.0-427.13.1.el9_4.x86_64"
+health_check_system_expected_kernel: ""
+
+# Minimum free disk space percentage on each listed mount point.
+health_check_system_disk_min_free_percent: 15
+
+# Mount points to check for free disk space. Empty list disables disk checks.
+# Example: ["/", "/boot", "/var"]
+health_check_system_disk_check_mounts: []
+
+# Check whether a secondary reboot is still required after patching.
+# On Debian/Ubuntu this tests for /var/run/reboot-required.
+# On RHEL/CentOS this runs `needs-restarting -r`.
+health_check_system_check_pending_reboot: true
+
 # ── Application checks ────────────────────────────────────────────────────────
 # Set to true to enable application checks
 health_check_applications_enabled: false
@@ -98,3 +124,34 @@ health_check_postgresql_min_version: ""
 # Maximum replication lag in bytes allowed before the check fails (0 = skip).
 # Only meaningful on a primary with active standbys.
 health_check_postgresql_max_replication_lag_bytes: 0
+
+# ── Filesystem checks ─────────────────────────────────────────────────────────
+# Set to true to enable filesystem checks (mounts, LVM, RAID)
+health_check_filesystem_enabled: false
+
+# List of mount points that must be present. Each entry is a path string.
+# Example: ["/mnt/data", "/mnt/backup"]
+health_check_filesystem_check_mounts: []
+
+# Check LVM volume group health with `vgs` (requires lvm2 package on the host)
+health_check_filesystem_check_lvm: false
+
+# Check mdadm software RAID arrays for degraded state via /proc/mdstat
+health_check_filesystem_check_raid: false
+
+# ── Log / journal checks ──────────────────────────────────────────────────────
+# Set to true to enable log scanning checks
+health_check_log_enabled: false
+
+# Scan systemd journal for priority 3 and above (errors/criticals) in the
+# current boot. Findings are reported as a warning by default.
+health_check_log_journal_errors: true
+
+# Set to true to fail the play when journal errors are detected.
+# Default false: errors are reported but do not fail the play.
+health_check_log_fail_on_journal_errors: false
+
+# Custom patterns to search for in the current boot journal using --grep.
+# Each entry is a regex string. Matches are always reported as warnings.
+# Example: ["segfault", "OOM killer", "kernel panic"]
+health_check_log_patterns: []

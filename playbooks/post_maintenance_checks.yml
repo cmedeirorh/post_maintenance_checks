@@ -13,6 +13,7 @@
 
   vars:
     # ── Services that must be up after any maintenance ────────────────────────
+    health_check_services_enabled: true
     health_check_services:
       - name: sshd
       - name: firewalld
@@ -20,6 +21,7 @@
       - name: postgresql
 
     # ── Application-level checks ──────────────────────────────────────────────
+    health_check_applications_enabled: true
     health_check_applications:
       - name: My Web App (gunicorn)
         process: gunicorn

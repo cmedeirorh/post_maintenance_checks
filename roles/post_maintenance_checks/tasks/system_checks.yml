@@ -1,0 +1,93 @@
+---
+# ── Reboot confirmation (uptime) ──────────────────────────────────────────────
+- name: System checks | assert system rebooted within maintenance window
+  ansible.builtin.assert:
+    that:
+      - ansible_uptime_seconds | int <= health_check_system_max_uptime_seconds | int
+    fail_msg: >-
+      System uptime ({{ ansible_uptime_seconds }}s) exceeds the expected maximum of
+      {{ health_check_system_max_uptime_seconds }}s — the reboot may not have occurred
+    success_msg: >-
+      System uptime ({{ ansible_uptime_seconds }}s) confirms a recent reboot
+  when: health_check_system_max_uptime_seconds | int > 0
+
+# ── Kernel version verification ───────────────────────────────────────────────
+- name: System checks | retrieve current kernel version
+  ansible.builtin.command:
+    cmd: uname -r
+  register: _kernel_version
+  changed_when: false
+  when: health_check_system_expected_kernel | length > 0
+
+- name: System checks | assert expected kernel is running
+  ansible.builtin.assert:
+    that:
+      - _kernel_version.stdout == health_check_system_expected_kernel
+    fail_msg: >-
+      Running kernel {{ _kernel_version.stdout }} does not match expected
+      {{ health_check_system_expected_kernel }}
+    success_msg: >-
+      Kernel {{ _kernel_version.stdout }} matches expected
+  when: health_check_system_expected_kernel | length > 0
+
+# ── Disk space health ─────────────────────────────────────────────────────────
+- name: System checks | assert sufficient free disk space on critical mounts
+  vars:
+    _mount_info: "{{ ansible_mounts | selectattr('mount', 'equalto', mount_path) | list }}"
+    _free_pct: >-
+      {{ (_mount_info[0].size_available / _mount_info[0].size_total * 100) | round(1)
+         if _mount_info | length > 0 else -1 }}
+  ansible.builtin.assert:
+    that:
+      - _mount_info | length > 0
+      - _free_pct | float >= health_check_system_disk_min_free_percent | int
+    fail_msg: >-
+      Mount {{ mount_path }}: {{ _free_pct }}% free space is below the minimum
+      {{ health_check_system_disk_min_free_percent }}%
+    success_msg: "Mount {{ mount_path }}: {{ _free_pct }}% free space"
+  loop: "{{ health_check_system_disk_check_mounts }}"
+  loop_control:
+    loop_var: mount_path
+    label: "{{ mount_path }}"
+  when: health_check_system_disk_check_mounts | length > 0
+
+# ── Pending reboot check (Debian / Ubuntu) ────────────────────────────────────
+- name: System checks | check for pending reboot flag (Debian/Ubuntu)
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: _reboot_required_file
+  when:
+    - ansible_facts['os_family'] == 'Debian'
+    - health_check_system_check_pending_reboot | bool
+
+- name: System checks | assert no pending reboot (Debian/Ubuntu)
+  ansible.builtin.assert:
+    that:
+      - not _reboot_required_file.stat.exists
+    fail_msg: "System requires another reboot — /var/run/reboot-required exists"
+    success_msg: "No pending reboot required"
+  when:
+    - ansible_facts['os_family'] == 'Debian'
+    - health_check_system_check_pending_reboot | bool
+
+# ── Pending reboot check (RHEL / CentOS) ─────────────────────────────────────
+- name: System checks | check for pending reboot (RHEL/CentOS)
+  ansible.builtin.command:
+    cmd: needs-restarting -r
+  register: _needs_restarting
+  failed_when: false
+  changed_when: false
+  when:
+    - ansible_facts['os_family'] == 'RedHat'
+    - health_check_system_check_pending_reboot | bool
+
+- name: System checks | assert no pending reboot (RHEL/CentOS)
+  ansible.builtin.assert:
+    that:
+      - _needs_restarting.rc == 0
+    fail_msg: "System requires a reboot — needs-restarting -r returned non-zero"
+    success_msg: "No pending reboot required"
+  when:
+    - ansible_facts['os_family'] == 'RedHat'
+    - health_check_system_check_pending_reboot | bool
+    - _needs_restarting.rc | int in [0, 1]
